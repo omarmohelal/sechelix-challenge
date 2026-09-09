@@ -1,0 +1,13 @@
+{
+  "$comment": "An illustrative submission showing the format. It is deliberately imperfect -- it flags a safe case and misses one -- so the scoring output shows every outcome column rather than a clean sweep.",
+  "01-receipt-export": {"verdict": "VULNERABLE", "class": "IDOR / missing tenant scoping"},
+  "02-report-sort": {"verdict": "VULNERABLE", "class": "SQL injection"},
+  "03-avatar-import": {"verdict": "VULNERABLE", "class": "SSRF via redirect"},
+  "04-doc-thumbnail": {"verdict": "SAFE"},
+  "05-reset-token": {"verdict": "VULNERABLE", "class": "weak randomness"},
+  "06-webhook-refund": {"verdict": "SAFE"},
+  "07-credit-redeem": {"verdict": "VULNERABLE", "class": "race condition"},
+  "08-invite-accept": {"verdict": "UNKNOWN"},
+  "09-archive-extract": {"verdict": "VULNERABLE", "class": "zip slip"},
+  "10-cache-key": {"verdict": "VULNERABLE", "class": "weak hash MD5"}
+}

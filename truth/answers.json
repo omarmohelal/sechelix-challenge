@@ -1,0 +1,100 @@
+{
+  "$comment": "Ground truth. Never place this directory in scope for a tool being scored -- use `python pack.py` to produce a blind copy that provably contains only the cases.",
+  "version": "1.0.0",
+  "cases": {
+    "01-receipt-export": {
+      "verdict": "VULNERABLE",
+      "class": "BOLA",
+      "cwe": "CWE-639",
+      "boundary": "tenant isolation",
+      "summary": "The query selects by id with no org_id predicate, so any authenticated caller exports any organization's receipts by guessing ids. The comment claims the UI only shows the caller's own org; the UI is not the boundary.",
+      "root_cause": "authorization enforced in the presentation layer, absent from the query",
+      "fix": "add `AND org_id = ?` bound to actor['org_id'] to the SELECT",
+      "decoy_shape": "the f-string builds only `?` placeholders and the ids are parameterized, so the SQL-injection reading is wrong",
+      "accept_terms": ["bola", "idor", "broken object level authorization", "missing tenant scoping", "cross-tenant", "authorization", "insecure direct object reference"]
+    },
+    "02-report-sort": {
+      "verdict": "SAFE",
+      "class": null,
+      "summary": "The sort key is mapped through a dict of literals and anything else raises. No value derived from the request reaches the query text; org_id is parameterized.",
+      "why_it_looks_bad": "an f-string builds the ORDER BY clause, which is the canonical SQL-injection shape",
+      "accept_terms": []
+    },
+    "03-avatar-import": {
+      "verdict": "VULNERABLE",
+      "class": "SSRF",
+      "cwe": "CWE-918",
+      "boundary": "outbound request destination",
+      "summary": "validate() resolves and checks the hostname, then urlopen follows redirects to a destination that was never checked. It is also a TOCTOU: the DNS answer used for the check is not the one used for the connection.",
+      "root_cause": "the allowlist is applied to the requested URL rather than to every destination actually connected to",
+      "fix": "disable redirect following (a urllib opener with a no-op HTTPRedirectHandler) and re-validate any destination before connecting; pin the resolved address for the connection",
+      "accept_terms": ["ssrf", "server-side request forgery", "redirect", "dns rebinding", "toctou"]
+    },
+    "04-doc-thumbnail": {
+      "verdict": "SAFE",
+      "class": null,
+      "summary": "subprocess.run is given an argument list with no shell, the document id must parse as a UUID before it is used in a path, and page is range-checked. Neither path traversal nor command injection is reachable.",
+      "why_it_looks_bad": "subprocess plus request-derived arguments is the canonical command-injection shape",
+      "accept_terms": []
+    },
+    "05-reset-token": {
+      "verdict": "VULNERABLE",
+      "class": "PREDICTABLE_TOKEN",
+      "cwe": "CWE-340",
+      "boundary": "account recovery",
+      "summary": "The token is sha256 of user id and the current unix second, both guessable. An attacker who knows a target's id computes candidates over a small time window and takes over the account. Tokens also never expire and are not single-use per issuance window.",
+      "root_cause": "a hash of low-entropy known values used where a random secret is required",
+      "fix": "secrets.token_urlsafe(32), stored hashed, with an expiry checked on consume",
+      "accept_terms": ["predictable", "insufficient entropy", "guessable token", "weak randomness", "account takeover", "no expiry", "cwe-330", "cwe-340"]
+    },
+    "06-webhook-refund": {
+      "verdict": "VULNERABLE",
+      "class": "REPLAY",
+      "cwe": "CWE-294",
+      "boundary": "exactly-once processing of a money event",
+      "summary": "The signature is verified correctly with compare_digest, but a validly signed body may be replayed indefinitely. Each replay credits the balance again. The provider itself documents at-least-once delivery, so this fires without an attacker.",
+      "root_cause": "no idempotency on the event id and no timestamp window; signature verification answers authenticity, not freshness or uniqueness",
+      "fix": "record the provider event id and reject an id already processed, inside the same transaction as the credit",
+      "decoy_shape": "the HMAC comparison is correct and is not the bug",
+      "accept_terms": ["replay", "idempotency", "duplicate", "at-least-once", "exactly-once", "double credit", "double refund"]
+    },
+    "07-credit-redeem": {
+      "verdict": "VULNERABLE",
+      "class": "RACE",
+      "cwe": "CWE-367",
+      "boundary": "single-use invariant on a money object",
+      "summary": "Check-then-act across two statements with no atomicity. Concurrent requests all read redeemed_by as NULL and each credits the balance, so one code is redeemed many times.",
+      "root_cause": "the single-use invariant is enforced by a prior SELECT rather than by the UPDATE itself",
+      "fix": "UPDATE credit_code SET redeemed_by = ? WHERE id = ? AND redeemed_by IS NULL, then credit only if rowcount == 1, in one transaction",
+      "accept_terms": ["race", "toctou", "race condition", "concurrency", "not atomic", "double redeem", "double spend", "idempotency"]
+    },
+    "08-invite-accept": {
+      "verdict": "VULNERABLE",
+      "class": "BOLA",
+      "cwe": "CWE-639",
+      "boundary": "tenant data exposure on an unauthenticated route",
+      "summary": "The #4412 fix was applied to accept_invite only. preview_invite still takes org_id from the query string and returns that organization's name, plan, seat count and billing email to an unauthenticated caller holding any valid invite token.",
+      "root_cause": "a remediation applied at one call site rather than at the invariant; the sibling route kept the original pattern",
+      "fix": "read the org from invite['org_id'] in preview_invite too, and return only the fields the landing page needs",
+      "regression_case": true,
+      "accept_terms": ["bola", "idor", "incomplete fix", "variant", "sibling", "unauthenticated", "information disclosure", "preview_invite", "authorization"]
+    },
+    "09-archive-extract": {
+      "verdict": "VULNERABLE",
+      "class": "PATH_TRAVERSAL",
+      "cwe": "CWE-22",
+      "boundary": "filesystem write confinement",
+      "summary": "Zip Slip. Only absolute paths are rejected; a member named ../../etc/app/config.py writes outside the workspace. mkdir(parents=True) happily creates the traversed directories.",
+      "root_cause": "the check tests the spelling of the path rather than where it resolves to",
+      "fix": "resolve the destination and require it to be relative to the resolved workspace before opening it for write; refuse symlink members",
+      "accept_terms": ["zip slip", "path traversal", "directory traversal", "arbitrary file write", "cwe-22"]
+    },
+    "10-cache-key": {
+      "verdict": "SAFE",
+      "class": null,
+      "summary": "MD5 names a derived image in the service's own cache. It is not a credential, not an integrity check, and never compared against attacker-supplied input; the inputs are a service-assigned UUID and two bounded integers.",
+      "why_it_looks_bad": "hashlib.md5 matches every weak-crypto rule ever written",
+      "accept_terms": []
+    }
+  }
+}
