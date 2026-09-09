@@ -1,0 +1,54 @@
+name: SecHelix
+
+# Two jobs in one: this repository gets a security review, and the published
+# SecHelix action gets exercised the way an outside consumer uses it -- by tag,
+# from a different repository, with nothing checked out from the action's own
+# source tree.
+#
+# The cases in cases/ are deliberately vulnerable, so this never gates a merge:
+# fail-on is `never` and SARIF is kept out of code scanning, where a deliberate
+# defect would read as a real one.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+
+      - id: sechelix
+        uses: omarmohelal/SecHelix@v4.0.0-alpha.2
+        with:
+          path: .
+          depth: quick
+          executor: none
+          fail-on: never
+          upload-sarif: false
+          artifact-name: sechelix-challenge-run
+
+      - name: Report what the run established
+        env:
+          OUTCOME: ${{ steps.sechelix.outputs.outcome }}
+          REASON: ${{ steps.sechelix.outputs.reason }}
+          RUN_ID: ${{ steps.sechelix.outputs.run-id }}
+        run: |
+          set -euo pipefail
+          echo "outcome=$OUTCOME"
+          echo "reason=$REASON"
+          echo "run-id=$RUN_ID"
+          [ -n "$OUTCOME" ] || { echo "::error::the published action produced no outcome"; exit 1; }
+          [ -n "$RUN_ID" ] || { echo "::error::the published action produced no run id"; exit 1; }
+          # With no reasoning executor the only honest answer is INCOMPLETE.
+          # If this ever says PASS, the action has started claiming a clean
+          # review it did not perform.
+          [ "$OUTCOME" = "INCOMPLETE" ] || { echo "::error::expected INCOMPLETE, got $OUTCOME"; exit 1; }
