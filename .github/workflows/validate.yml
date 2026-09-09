@@ -36,3 +36,9 @@ jobs:
 
       - name: The example submission scores
         run: python score.py answers.example.json
+
+      - name: The quiz page is not stale
+        run: |
+          set -euo pipefail
+          python build_quiz.py
+          git diff --exit-code -- docs/index.html             || { echo "::error::docs/index.html is stale — run build_quiz.py and commit"; exit 1; }

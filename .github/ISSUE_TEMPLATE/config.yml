@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Disagree with a verdict?
+    url: https://github.com/omarmohelal/sechelix-challenge/issues/new
+    about: A case that turns out to be ambiguous is a bug in the case. Open a normal issue — we would rather fix it than defend it.
+  - name: SecHelix itself
+    url: https://github.com/omarmohelal/SecHelix
+    about: The AppSec agent this challenge was built alongside.

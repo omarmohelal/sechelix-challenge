@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Can you tell the real bug from the decoy? &middot; SecHelix Challenge</title>
+<meta name="description" content="Ten small AppSec cases. Seven have a real defect, three are decoys written to look like what scanners flag. A false positive costs exactly what a miss costs.">
+<meta property="og:title" content="Can you tell the real bug from the decoy?">
+<meta property="og:description" content="Ten AppSec cases. Three are decoys. A false positive costs exactly what a miss costs.">
+<meta property="og:type" content="website">
+<meta name="twitter:card" content="summary_large_image">
+<style>
+:root{--bg:#fbfbfa;--fg:#1a1a19;--mut:#6b6b68;--line:#e3e3e0;--card:#fff;--code:#f6f6f4;--ok:#0d7a4a;--no:#b4341f;--accent:#5b3fa8}
+@media (prefers-color-scheme:dark){:root{--bg:#141416;--fg:#ececea;--mut:#9a9a96;--line:#2c2c30;--card:#1c1c1f;--code:#0f0f11;--ok:#4ade80;--no:#f87171;--accent:#a78bfa}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.6 ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+.wrap{max-width:760px;margin:0 auto;padding:2.5rem 1.25rem 5rem}
+h1{font-size:1.9rem;line-height:1.25;margin:0 0 .6rem;letter-spacing:-.02em}
+.sub{color:var(--mut);margin:0 0 1.6rem}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:1.25rem;margin:0 0 1.25rem}
+.meta{display:flex;justify-content:space-between;align-items:center;gap:1rem;color:var(--mut);font-size:.85rem;margin-bottom:.5rem}
+.case-title{font-weight:600;color:var(--fg);text-transform:capitalize}
+pre{background:var(--code);border:1px solid var(--line);border-radius:8px;padding:1rem;overflow-x:auto;font:13px/1.5 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;margin:1rem 0}
+code{background:var(--code);padding:.12em .35em;border-radius:4px;font:.9em ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+pre code{background:none;padding:0}
+.btns{display:flex;gap:.6rem;flex-wrap:wrap;margin-top:1rem}
+button{font:inherit;font-weight:600;padding:.6rem 1.1rem;border-radius:8px;border:1px solid var(--line);background:var(--card);color:var(--fg);cursor:pointer}
+button:hover{border-color:var(--accent)}
+button:disabled{opacity:.45;cursor:default}
+.reveal{margin-top:1rem;padding:1rem;border-radius:8px;border:1px solid var(--line);background:var(--code)}
+.reveal p{margin:.5rem 0}
+.tag{font-weight:700;letter-spacing:.04em;font-size:.8rem}
+.right{color:var(--ok)} .wrong{color:var(--no)}
+.prog{color:var(--mut);font-size:.85rem;margin-bottom:1rem}
+table{width:100%;border-collapse:collapse;margin:1rem 0}
+td{padding:.4rem 0;border-bottom:1px solid var(--line)}
+td:last-child{text-align:right;font-variant-numeric:tabular-nums;font-weight:600}
+a{color:var(--accent)}
+.small{font-size:.85rem;color:var(--mut)}
+.hidden{display:none}
+</style>
+</head>
+<body>
+<div class="wrap">
+<h1>One real vulnerability. One scary-looking false positive.<br>Can you tell which is which?</h1>
+<p class="sub">Ten small AppSec cases. Seven have a real defect. Three do not &mdash; and all three are
+written to look like exactly what a scanner flags. Getting a decoy wrong costs the same as missing a
+real bug, because in a real queue it does.</p>
+<p class="sub small">No signup, nothing stored, nothing sent anywhere. About five minutes.</p>
+
+<div id="quiz"></div>
+<div id="result" class="hidden"></div>
+</div>
+
+<script>
+const CASES = [{"id": "01-receipt-export", "title": "receipt export", "prompt": "<code>export_receipts</code> backs <code>GET /api/exports/receipts?ids=101,102,103</code>.</p><p><code>actor</code> is the authenticated caller. It has <code>actor[&quot;id&quot;]</code>, <code>actor[&quot;org_id&quot;]</code> and <code>actor[&quot;role&quot;]</code> (<code>employee</code> or <code>approver</code>). Authentication happens before this function is called and is not in scope.</p><p><code>db</code> is a SQLite connection over a table <code>receipt(id, org_id, person_id, merchant, amount_cents, memo, status)</code> holding rows for many organizations.", "code": "\"\"\"Receipt export. Called by GET /api/exports/receipts?ids=101,102,103\"\"\"\n\nfrom typing import Iterable\n\n\ndef parse_ids(raw: str) -> list[int]:\n    return [int(part) for part in raw.split(\",\") if part.strip()]\n\n\ndef export_receipts(db, actor, raw_ids: str) -> list[dict]:\n    \"\"\"Return the requested receipts as export rows.\"\"\"\n    ids = parse_ids(raw_ids)\n    if len(ids) > 500:\n        raise ValueError(\"too many ids in one export\")\n\n    placeholders = \",\".join(\"?\" for _ in ids)\n    rows = db.execute(\n        f\"SELECT id, org_id, merchant, amount_cents, memo FROM receipt \"\n        f\"WHERE id IN ({placeholders})\",\n        ids,\n    ).fetchall()\n\n    # The UI only ever shows the caller their own organization's receipts.\n    return [\n        {\n            \"id\": row[\"id\"],\n            \"merchant\": row[\"merchant\"],\n            \"amount_cents\": row[\"amount_cents\"],\n            \"memo\": row[\"memo\"],\n        }\n        for row in rows\n    ]\n\n\ndef render_csv(rows: Iterable[dict]) -> str:\n    header = \"id,merchant,amount_cents,memo\"\n    body = \"\\n\".join(\n        f\"{r['id']},{r['merchant']},{r['amount_cents']},{r['memo']}\" for r in rows\n    )\n    return f\"{header}\\n{body}\\n\"\n", "verdict": "VULNERABLE", "cls": "BOLA", "cwe": "CWE-639", "summary": "The query selects by id with no org_id predicate, so any authenticated caller exports any organization&#x27;s receipts by guessing ids. The comment claims the UI only shows the caller&#x27;s own org; the UI is not the boundary.", "why": "", "fix": "add <code>AND org_id = ?</code> bound to actor[&#x27;org_id&#x27;] to the SELECT"}, {"id": "02-report-sort", "title": "report sort", "prompt": "<code>spend_report</code> backs the spend dashboard. <code>sort</code> and <code>direction</code> come straight from the query string. <code>org_id</code> is the authenticated caller&#x27;s organization and is not attacker-controlled.", "code": "\"\"\"Report ordering for the spend dashboard.\"\"\"\n\nCOLUMNS = {\n    \"date\": \"created_at\",\n    \"amount\": \"amount_cents\",\n    \"merchant\": \"merchant\",\n    \"status\": \"status\",\n}\nDIRECTIONS = {\"asc\": \"ASC\", \"desc\": \"DESC\"}\n\n\ndef spend_report(db, org_id: int, sort: str = \"date\", direction: str = \"desc\"):\n    column = COLUMNS.get(sort)\n    if column is None:\n        raise ValueError(f\"unsupported sort field: {sort}\")\n    order = DIRECTIONS.get(direction.lower())\n    if order is None:\n        raise ValueError(f\"unsupported direction: {direction}\")\n\n    return db.execute(\n        f\"SELECT merchant, amount_cents, status, created_at FROM receipt \"\n        f\"WHERE org_id = ? ORDER BY {column} {order} LIMIT 200\",\n        (org_id,),\n    ).fetchall()\n", "verdict": "SAFE", "cls": "", "cwe": "", "summary": "The sort key is mapped through a dict of literals and anything else raises. No value derived from the request reaches the query text; org_id is parameterized.", "why": "an f-string builds the ORDER BY clause, which is the canonical SQL-injection shape", "fix": ""}, {"id": "03-avatar-import", "title": "avatar import", "prompt": "<code>import_avatar</code> is reachable from an authenticated endpoint where the user pastes a URL to their profile picture. The service runs inside a VPC that also hosts an internal metadata endpoint and several private services.", "code": "\"\"\"Import a user avatar from a URL they supply.\"\"\"\n\nimport ipaddress\nimport socket\nimport urllib.parse\nimport urllib.request\n\nMAX_BYTES = 2 * 1024 * 1024\nALLOWED_SCHEMES = {\"https\"}\n\n\ndef _is_public(host: str) -> bool:\n    try:\n        for family, _, _, _, sockaddr in socket.getaddrinfo(host, None):\n            address = ipaddress.ip_address(sockaddr[0])\n            if address.is_private or address.is_loopback or address.is_link_local:\n                return False\n    except socket.gaierror:\n        return False\n    return True\n\n\ndef validate(url: str) -> str:\n    parsed = urllib.parse.urlparse(url)\n    if parsed.scheme not in ALLOWED_SCHEMES:\n        raise ValueError(\"only https is allowed\")\n    if not parsed.hostname:\n        raise ValueError(\"missing host\")\n    if not _is_public(parsed.hostname):\n        raise ValueError(\"destination is not a public address\")\n    return url\n\n\ndef import_avatar(url: str) -> bytes:\n    \"\"\"Fetch the image the user pointed us at.\"\"\"\n    safe_url = validate(url)\n    with urllib.request.urlopen(safe_url, timeout=5) as response:\n        if response.headers.get(\"Content-Type\", \"\").split(\";\")[0] not in (\n            \"image/png\", \"image/jpeg\", \"image/webp\",\n        ):\n            raise ValueError(\"not an image\")\n        return response.read(MAX_BYTES)\n", "verdict": "VULNERABLE", "cls": "SSRF", "cwe": "CWE-918", "summary": "validate() resolves and checks the hostname, then urlopen follows redirects to a destination that was never checked. It is also a TOCTOU: the DNS answer used for the check is not the one used for the connection.", "why": "", "fix": "disable redirect following (a urllib opener with a no-op HTTPRedirectHandler) and re-validate any destination before connecting; pin the resolved address for the connection"}, {"id": "04-doc-thumbnail", "title": "doc thumbnail", "prompt": "<code>make_thumbnail</code> runs when a user opens an uploaded PDF in the web viewer. <code>document_id</code> and <code>page</code> both come from the request. Authorization for the document is enforced by the caller and is not in scope.", "code": "\"\"\"Render a thumbnail for an uploaded document.\"\"\"\n\nimport pathlib\nimport subprocess\nimport uuid\n\nRENDERER = \"/usr/bin/pdftoppm\"\nSTORAGE = pathlib.Path(\"/var/lib/app/documents\")\nTHUMBS = pathlib.Path(\"/var/lib/app/thumbnails\")\n\n\ndef _stored_path(document_id: str) -> pathlib.Path:\n    \"\"\"Documents are addressed by the UUID we assigned at upload time.\"\"\"\n    identifier = uuid.UUID(document_id)          # raises ValueError if not a UUID\n    path = STORAGE / f\"{identifier}.pdf\"\n    if not path.is_file():\n        raise FileNotFoundError(document_id)\n    return path\n\n\ndef make_thumbnail(document_id: str, page: int = 1) -> pathlib.Path:\n    source = _stored_path(document_id)\n    if not 1 <= page <= 500:\n        raise ValueError(\"page out of range\")\n\n    destination = THUMBS / str(uuid.UUID(document_id))\n    subprocess.run(\n        [RENDERER, \"-png\", \"-f\", str(page), \"-l\", str(page),\n         \"-scale-to\", \"320\", str(source), str(destination)],\n        check=True,\n        timeout=30,\n    )\n    return destination.with_suffix(\".png\")\n", "verdict": "SAFE", "cls": "", "cwe": "", "summary": "subprocess.run is given an argument list with no shell, the document id must parse as a UUID before it is used in a path, and page is range-checked. Neither path traversal nor command injection is reachable.", "why": "subprocess plus request-derived arguments is the canonical command-injection shape", "fix": ""}, {"id": "05-reset-token", "title": "reset token", "prompt": "<code>issue_reset_token</code> runs when someone submits the &quot;forgot password&quot; form. The token is emailed as a link. <code>consume_reset_token</code> runs when that link is opened and returns the account whose password may then be set.</p><p><code>person.id</code> is a sequential integer. User enumeration through other endpoints is out of scope; assume an attacker can learn a target&#x27;s user id.", "code": "\"\"\"Password reset tokens.\"\"\"\n\nimport hashlib\nimport time\n\n\ndef issue_reset_token(db, email: str) -> str | None:\n    person = db.execute(\"SELECT id FROM person WHERE email = ?\", (email,)).fetchone()\n    if person is None:\n        return None\n\n    # Unique per user per second, and unguessable without knowing the user id.\n    seed = f\"{person['id']}:{int(time.time())}\"\n    token = hashlib.sha256(seed.encode()).hexdigest()\n\n    db.execute(\n        \"INSERT INTO reset_token (person_id, token, created_at) VALUES (?, ?, ?)\",\n        (person[\"id\"], token, int(time.time())),\n    )\n    db.commit()\n    return token\n\n\ndef consume_reset_token(db, token: str):\n    row = db.execute(\n        \"SELECT person_id FROM reset_token WHERE token = ?\", (token,)\n    ).fetchone()\n    if row is None:\n        raise PermissionError(\"invalid reset token\")\n    db.execute(\"DELETE FROM reset_token WHERE token = ?\", (token,))\n    db.commit()\n    return row[\"person_id\"]\n", "verdict": "VULNERABLE", "cls": "PREDICTABLE_TOKEN", "cwe": "CWE-340", "summary": "The token is sha256 of user id and the current unix second, both guessable. An attacker who knows a target&#x27;s id computes candidates over a small time window and takes over the account. Tokens also never expire and are not single-use per issuance window.", "why": "", "fix": "secrets.token_urlsafe(32), stored hashed, with an expiry checked on consume"}, {"id": "06-webhook-refund", "title": "webhook refund", "prompt": "<code>handle_refund_webhook</code> is the HTTP handler for the payment provider&#x27;s refund callback. It is reachable from the public internet, as provider webhooks must be. <code>SIGNING_SECRET</code> is a real shared secret loaded from the secret store; assume it has not leaked.</p><p>The provider retries a webhook until it receives a 2xx, and documents that callbacks may be delivered more than once.", "code": "\"\"\"Payment provider refund webhook.\"\"\"\n\nimport hashlib\nimport hmac\nimport json\n\nSIGNING_SECRET = None  # injected from the secret store at startup\n\n\ndef verify(body: bytes, signature_header: str) -> bool:\n    expected = hmac.new(SIGNING_SECRET, body, hashlib.sha256).hexdigest()\n    return hmac.compare_digest(expected, signature_header)\n\n\ndef handle_refund_webhook(db, body: bytes, signature_header: str) -> dict:\n    if not verify(body, signature_header):\n        raise PermissionError(\"bad signature\")\n\n    event = json.loads(body)\n    if event[\"type\"] != \"refund.succeeded\":\n        return {\"ignored\": event[\"type\"]}\n\n    order_id = event[\"data\"][\"order_id\"]\n    amount = int(event[\"data\"][\"amount_cents\"])\n\n    order = db.execute(\"SELECT * FROM orders WHERE id = ?\", (order_id,)).fetchone()\n    if order is None:\n        raise KeyError(order_id)\n\n    db.execute(\n        \"UPDATE customer_balance SET cents = cents + ? WHERE person_id = ?\",\n        (amount, order[\"person_id\"]),\n    )\n    db.execute(\"UPDATE orders SET status = 'refunded' WHERE id = ?\", (order_id,))\n    db.commit()\n    return {\"credited\": amount, \"order\": order_id}\n", "verdict": "VULNERABLE", "cls": "REPLAY", "cwe": "CWE-294", "summary": "The signature is verified correctly with compare_digest, but a validly signed body may be replayed indefinitely. Each replay credits the balance again. The provider itself documents at-least-once delivery, so this fires without an attacker.", "why": "", "fix": "record the provider event id and reject an id already processed, inside the same transaction as the credit"}, {"id": "07-credit-redeem", "title": "credit redeem", "prompt": "<code>redeem</code> backs <code>POST /api/credits/redeem</code>. Codes are single-use and worth real money. The service runs multiple worker processes behind a load balancer against one shared database.</p><p>Authentication and rate limiting are handled upstream; a caller may still issue several requests concurrently.", "code": "\"\"\"Redeem a promotional credit code.\"\"\"\n\n\ndef redeem(db, actor, code: str) -> dict:\n    row = db.execute(\n        \"SELECT id, value_cents, redeemed_by FROM credit_code WHERE code = ?\",\n        (code,),\n    ).fetchone()\n\n    if row is None:\n        raise KeyError(\"no such code\")\n    if row[\"redeemed_by\"] is not None:\n        raise ValueError(\"code already redeemed\")\n\n    db.execute(\n        \"UPDATE customer_balance SET cents = cents + ? WHERE person_id = ?\",\n        (row[\"value_cents\"], actor[\"id\"]),\n    )\n    db.execute(\n        \"UPDATE credit_code SET redeemed_by = ? WHERE id = ?\",\n        (actor[\"id\"], row[\"id\"]),\n    )\n    db.commit()\n    return {\"credited\": row[\"value_cents\"]}\n", "verdict": "VULNERABLE", "cls": "RACE", "cwe": "CWE-367", "summary": "Check-then-act across two statements with no atomicity. Concurrent requests all read redeemed_by as NULL and each credits the balance, so one code is redeemed many times.", "why": "", "fix": "UPDATE credit_code SET redeemed_by = ? WHERE id = ? AND redeemed_by IS NULL, then credit only if rowcount == 1, in one transaction"}, {"id": "08-invite-accept", "title": "invite accept", "prompt": "Both functions are reachable: <code>accept_invite</code> from <code>POST /api/invites/accept</code> (authenticated) and <code>preview_invite</code> from <code>GET /invite/&lt;token&gt;?org=&lt;id&gt;</code> (unauthenticated \u2014 the landing page a new user sees before signing up).</p><p>A previous security report about this file was fixed in #4412.", "code": "\"\"\"Team invitations.\n\nChanged in #4412 after a security report: accepting an invitation used to trust\nthe org_id in the request body. It now reads the org from the stored invitation.\n\"\"\"\n\n\ndef accept_invite(db, actor, token: str) -> dict:\n    invite = db.execute(\n        \"SELECT id, org_id, email, role, accepted FROM invite WHERE token = ?\",\n        (token,),\n    ).fetchone()\n    if invite is None or invite[\"accepted\"]:\n        raise PermissionError(\"invalid invitation\")\n\n    # #4412: org comes from the invitation, never from the caller.\n    db.execute(\n        \"UPDATE person SET org_id = ?, role = ? WHERE id = ?\",\n        (invite[\"org_id\"], invite[\"role\"], actor[\"id\"]),\n    )\n    db.execute(\"UPDATE invite SET accepted = 1 WHERE id = ?\", (invite[\"id\"],))\n    db.commit()\n    return {\"org_id\": invite[\"org_id\"], \"role\": invite[\"role\"]}\n\n\ndef preview_invite(db, token: str, org_id: int) -> dict:\n    \"\"\"Unauthenticated preview shown on the invitation landing page.\"\"\"\n    invite = db.execute(\n        \"SELECT email, role FROM invite WHERE token = ?\", (token,)\n    ).fetchone()\n    if invite is None:\n        raise KeyError(\"invalid invitation\")\n    org = db.execute(\n        \"SELECT name, plan, seat_count, billing_email FROM org WHERE id = ?\",\n        (org_id,),\n    ).fetchone()\n    return {\n        \"invited_email\": invite[\"email\"],\n        \"role\": invite[\"role\"],\n        \"organization\": dict(org),\n    }\n", "verdict": "VULNERABLE", "cls": "BOLA", "cwe": "CWE-639", "summary": "The #4412 fix was applied to accept_invite only. preview_invite still takes org_id from the query string and returns that organization&#x27;s name, plan, seat count and billing email to an unauthenticated caller holding any valid invite token.", "why": "", "fix": "read the org from invite[&#x27;org_id&#x27;] in preview_invite too, and return only the fields the landing page needs"}, {"id": "09-archive-extract", "title": "archive extract", "prompt": "<code>restore</code> runs when a user uploads a <code>.zip</code> backup to restore their workspace. <code>archive_path</code> is the uploaded file. <code>workspace</code> is a per-user directory the service owns. The process runs as a service account with write access to the application&#x27;s own installation directory.", "code": "\"\"\"Restore a workspace from an uploaded backup archive.\"\"\"\n\nimport pathlib\nimport zipfile\n\nMAX_TOTAL_BYTES = 200 * 1024 * 1024\n\n\ndef restore(archive_path: pathlib.Path, workspace: pathlib.Path) -> list[str]:\n    workspace.mkdir(parents=True, exist_ok=True)\n    written: list[str] = []\n\n    with zipfile.ZipFile(archive_path) as archive:\n        total = sum(info.file_size for info in archive.infolist())\n        if total > MAX_TOTAL_BYTES:\n            raise ValueError(\"archive too large when expanded\")\n\n        for info in archive.infolist():\n            if info.is_dir():\n                continue\n            if info.filename.startswith(\"/\"):\n                raise ValueError(f\"absolute path in archive: {info.filename}\")\n\n            destination = workspace / info.filename\n            destination.parent.mkdir(parents=True, exist_ok=True)\n            with archive.open(info) as source, open(destination, \"wb\") as target:\n                target.write(source.read())\n            written.append(info.filename)\n\n    return written\n", "verdict": "VULNERABLE", "cls": "PATH_TRAVERSAL", "cwe": "CWE-22", "summary": "Zip Slip. Only absolute paths are rejected; a member named ../../etc/app/config.py writes outside the workspace. mkdir(parents=True) happily creates the traversed directories.", "why": "", "fix": "resolve the destination and require it to be relative to the resolved workspace before opening it for write; refuse symlink members"}, {"id": "10-cache-key", "title": "cache key", "prompt": "<code>cache_key</code> names entries in the thumbnail cache. <code>document_id</code> is a UUID the service assigned at upload time; <code>page</code> and <code>width</code> are validated integers from a fixed set of render presets.", "code": "\"\"\"Thumbnail cache addressing.\"\"\"\n\nimport hashlib\n\nCACHE_VERSION = \"v3\"\n\n\ndef cache_key(document_id: str, page: int, width: int) -> str:\n    \"\"\"Stable name for a rendered thumbnail.\n\n    MD5 rather than SHA-256 purely for key length: this names a derived image in\n    our own cache and is never compared against attacker-supplied input, used as\n    a credential, or relied on for integrity. A collision costs one wrong\n    thumbnail, and the inputs are our own UUID plus two bounded integers.\n    \"\"\"\n    material = f\"{CACHE_VERSION}:{document_id}:{page}:{width}\"\n    return hashlib.md5(material.encode()).hexdigest()\n\n\ndef cache_path(root, document_id: str, page: int, width: int):\n    key = cache_key(document_id, page, width)\n    return root / key[:2] / f\"{key}.webp\"\n", "verdict": "SAFE", "cls": "", "cwe": "", "summary": "MD5 names a derived image in the service&#x27;s own cache. It is not a credential, not an integrity check, and never compared against attacker-supplied input; the inputs are a service-assigned UUID and two bounded integers.", "why": "hashlib.md5 matches every weak-crypto rule ever written", "fix": ""}];
+let i = 0, answers = [];
+
+const el = (h) => { const d = document.createElement('div'); d.innerHTML = h; return d.firstElementChild; };
+
+function render() {
+  const q = document.getElementById('quiz');
+  q.innerHTML = '';
+  if (i >= CASES.length) return finish();
+  const c = CASES[i];
+  q.appendChild(el(`
+    <div class="card">
+      <div class="prog">Case ${i + 1} of ${CASES.length}</div>
+      <div class="meta"><span class="case-title">${c.title}</span></div>
+      <p>${c.prompt}</p>
+      <pre><code>${c.code.replace(/&/g,'&amp;').replace(/</g,'&lt;')}</code></pre>
+      <div class="btns">
+        <button data-a="VULNERABLE">Has a defect</button>
+        <button data-a="SAFE">Safe as written</button>
+        <button data-a="UNKNOWN">Can't tell</button>
+      </div>
+      <div id="rev"></div>
+    </div>`));
+  q.querySelectorAll('button').forEach(b => b.onclick = () => answer(b.dataset.a));
+}
+
+function answer(a) {
+  const c = CASES[i];
+  const correct = a === c.verdict;
+  answers.push({id: c.id, answered: a, truth: c.verdict, correct, abstained: a === 'UNKNOWN'});
+  document.querySelectorAll('#quiz button').forEach(b => b.disabled = true);
+  const verdictLine = a === 'UNKNOWN'
+    ? `<span class="tag">ABSTAINED</span> &mdash; that scores zero, not a penalty. Truth: <strong>${c.verdict}</strong>.`
+    : (correct ? `<span class="tag right">CORRECT</span>` : `<span class="tag wrong">WRONG</span>`)
+      + ` &mdash; this one is <strong>${c.verdict}</strong>${c.cls ? ' (' + c.cls + (c.cwe ? ', ' + c.cwe : '') + ')' : ''}.`;
+  document.getElementById('rev').appendChild(el(`
+    <div class="reveal">
+      <p>${verdictLine}</p>
+      <p>${c.summary}</p>
+      ${c.why ? `<p class="small"><strong>Why it looks dangerous:</strong> ${c.why}</p>` : ''}
+      ${c.fix ? `<p class="small"><strong>Smallest fix:</strong> ${c.fix}</p>` : ''}
+      <div class="btns"><button id="next">${i + 1 < CASES.length ? 'Next case' : 'See your score'}</button></div>
+    </div>`));
+  document.getElementById('next').onclick = () => { i++; render(); };
+  document.getElementById('next').scrollIntoView({behavior: 'smooth', block: 'center'});
+}
+
+function finish() {
+  const t = {
+    correct: answers.filter(a => a.correct).length,
+    missed: answers.filter(a => !a.correct && !a.abstained && a.truth === 'VULNERABLE').length,
+    fp: answers.filter(a => !a.correct && !a.abstained && a.truth === 'SAFE').length,
+    abstained: answers.filter(a => a.abstained).length,
+  };
+  const r = document.getElementById('result');
+  r.className = '';
+  r.appendChild(el(`
+    <div class="card">
+      <h2 style="margin-top:0">Your score</h2>
+      <table>
+        <tr><td>Correct</td><td>${t.correct}/${CASES.length}</td></tr>
+        <tr><td>Missed a real defect</td><td>${t.missed}</td></tr>
+        <tr><td>Flagged something safe</td><td>${t.fp}</td></tr>
+        <tr><td>Abstained</td><td>${t.abstained}</td></tr>
+      </table>
+      <p class="small">Two error columns, no single number. Precision and recall are different
+      failures with different costs, and an average hides the one you needed to know.
+      <strong>Abstaining scores zero rather than counting as an error</strong> &mdash; "I could not
+      determine this" is a different behaviour from guessing.</p>
+      <p class="small">Ten hand-written cases measure you on these ten cases. They are not a
+      benchmark and support no general claim about anyone, including us.</p>
+      <p><strong>Now run your scanner on it.</strong> The same ten cases, the scoring script and the
+      full ground truth &mdash; class, CWE, root cause and smallest fix for each &mdash; are here:
+      <a href="https://github.com/omarmohelal/sechelix-challenge">github.com/omarmohelal/sechelix-challenge</a></p>
+      <p class="small">Built alongside <a href="https://github.com/omarmohelal/SecHelix">SecHelix</a>, an AppSec agent that
+      sends every candidate finding to an independent verifier whose only job is to disprove it.
+      The challenge is deliberately tool-neutral &mdash; nothing in it is SecHelix-specific.</p>
+    </div>`));
+  document.getElementById('quiz').innerHTML = '';
+  r.scrollIntoView({behavior: 'smooth'});
+}
+
+render();
+</script>
+</body>
+</html>

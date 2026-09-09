@@ -1,0 +1,72 @@
+name: Submit a result
+description: Share how a tool, agent or person scored on the ten cases.
+title: "[Result]: "
+labels: ["result"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Results are welcome from **any** tool, including ones that beat SecHelix.
+        That is the point — a challenge whose author always wins is not a challenge.
+
+        Please run against a **blind packet** (`python pack.py --out blind`) so the
+        answers were not in scope. If you could not, say so; a contaminated run is
+        still interesting, it is just a different measurement.
+
+        There is deliberately **no leaderboard**. Results are a discussion, not a ranking.
+  - type: input
+    id: tool
+    attributes:
+      label: What did you run?
+      description: Tool or model, with version. "Me, by hand" is a valid answer.
+      placeholder: "Semgrep 1.x / Claude Opus 5 via <agent> / by hand"
+    validations:
+      required: true
+  - type: dropdown
+    id: blind
+    attributes:
+      label: Was it blind?
+      options:
+        - "Yes — ran against a packet built by pack.py"
+        - "No — the repository including truth/ was in scope"
+        - "Partly / not sure"
+    validations:
+      required: true
+  - type: textarea
+    id: config
+    attributes:
+      label: Exact configuration
+      description: >-
+        Command line, ruleset, prompt, model, flags. Someone must be able to
+        reproduce this. A result without a reproducible configuration is an
+        anecdote, and naming a tool on the strength of one is unfair to it.
+      render: shell
+    validations:
+      required: true
+  - type: textarea
+    id: output
+    attributes:
+      label: Scorer output
+      description: Paste the output of `python score.py your-answers.json`.
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: notes
+    attributes:
+      label: What was interesting?
+      description: >-
+        The useful part. Which decoy fooled it? Did it abstain anywhere? Did it
+        get the verdict right for the wrong reason? Did you disagree with our
+        ground truth — if so, say which case and why, that is a bug report.
+    validations:
+      required: false
+  - type: checkboxes
+    id: fairness
+    attributes:
+      label: Fairness
+      options:
+        - label: I ran this tool under a configuration its maintainers would consider reasonable.
+          required: true
+        - label: I am reporting the result as measured, including where it did well.
+          required: true

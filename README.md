@@ -5,6 +5,9 @@ are written to look like the thing every pattern matcher is trained to flag.
 
 You can score a tool — or yourself — on them in about ten minutes.
 
+**[Take it in your browser →](https://omarmohelal.github.io/sechelix-challenge/)**
+No signup, nothing stored, about five minutes. Or run it against your own scanner:
+
 ```bash
 git clone https://github.com/omarmohelal/sechelix-challenge
 cd sechelix-challenge
@@ -53,6 +56,13 @@ measuring the wrong quantity.
 finding. Matching is generous — any accepted synonym, substring,
 case-insensitive — because the question is whether you identified the defect,
 not whether you used our spelling of it.
+
+**There is no leaderboard, and there will not be one.** Publish your result, argue
+with ours, disagree with a verdict. The moment this becomes a ranking, it stops
+being a test and becomes a marketing claim — including for us. Share results in
+[an issue](https://github.com/omarmohelal/sechelix-challenge/issues/new?template=result.yml);
+results that beat SecHelix are as welcome as ones that don't, because a challenge
+whose author always wins is not a challenge.
 
 ## Submission format
 

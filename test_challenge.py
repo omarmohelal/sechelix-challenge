@@ -212,5 +212,39 @@ class BlindPacket(unittest.TestCase):
             self.assertFalse(out.exists(), "a refused packet must not be left on disk")
 
 
+class QuizPage(unittest.TestCase):
+    """The shareable page is generated. A stale one is worse than none."""
+
+    def test_the_committed_page_matches_the_current_cases(self):
+        import build_quiz
+
+        committed = (ROOT / "docs/index.html").read_text(encoding="utf-8")
+        self.assertEqual(
+            committed, build_quiz.build(),
+            "docs/index.html is stale -- run `python build_quiz.py` and commit the result",
+        )
+
+    def test_every_case_reaches_the_page(self):
+        page = (ROOT / "docs/index.html").read_text(encoding="utf-8")
+        for case in case_ids():
+            with self.subTest(case=case):
+                self.assertIn(case, page)
+
+    def test_the_page_states_the_limitation(self):
+        """The honesty line is load-bearing; it must not get edited out."""
+        # Whitespace-normalised: the template hard-wraps, so a literal match
+        # would fail on a reflow rather than on the sentence going missing.
+        page = " ".join((ROOT / "docs/index.html").read_text(encoding="utf-8").split())
+        self.assertIn("not a benchmark and support no general claim", page)
+        self.assertIn("Abstaining scores zero rather than counting as an error", page)
+        self.assertIn("No signup, nothing stored, nothing sent anywhere", page)
+
+    def test_the_page_makes_no_accuracy_claim(self):
+        page = (ROOT / "docs/index.html").read_text(encoding="utf-8").lower()
+        for phrase in ("industry-leading", "% accuracy", "outperforms", "best in class"):
+            with self.subTest(phrase=phrase):
+                self.assertNotIn(phrase, page)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
